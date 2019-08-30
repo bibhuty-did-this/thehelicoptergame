@@ -33,6 +33,11 @@ public class KeyValueDAO implements KeyValueRepository {
     }
 
     @Override
+    public String getById(String key, String hash) {
+        return (String) hashOperations.get(key,hash);
+    }
+
+    @Override
     public Map<String, String> findAll(String key) {
         Map<String,String > allEntries=hashOperations.entries(key);
         return allEntries;

@@ -7,8 +7,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.io.Serializable;
-
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
@@ -16,11 +14,13 @@ public class WarEvent{
     private Long timestamp=System.currentTimeMillis();
     private Player playerNo;
     private Actions action;
+    private Integer movement;
     private Integer points;
 
     public void prepareWarEvent(EventRequest eventRequest){
         this.playerNo=eventRequest.getPlayerNo();
         this.action=eventRequest.getAction();
+        this.movement=eventRequest.getMovement();
         this.points=eventRequest.getPoints();
     }
 
@@ -28,8 +28,9 @@ public class WarEvent{
     public String toString() {
         return "WarEvent{" +
                 "timestamp=" + timestamp +
-                ", playerNo='" + playerNo + '\'' +
-                ", action='" + action + '\'' +
+                ", playerNo=" + playerNo +
+                ", action=" + action +
+                ", movement=" + movement +
                 ", points=" + points +
                 '}';
     }
