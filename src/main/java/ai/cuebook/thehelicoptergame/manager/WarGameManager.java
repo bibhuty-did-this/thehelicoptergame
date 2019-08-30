@@ -66,5 +66,9 @@ public class WarGameManager {
         WarEvent warEvent=new WarEvent();
         warEvent.prepareWarEvent(eventRequest);
         publisher.send(topic,warEvent);
+        new Thread(() -> {
+            WarAction warAction=new WarAction(eventRequest.getPlayerNo(),eventRequest.getAction());
+            warActionRepository.save(warAction);
+        }).start();
     }
 }

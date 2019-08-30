@@ -12,6 +12,4 @@ import lombok.NoArgsConstructor;
 public class EventRequest {
     private Player playerNo;
     private Actions action;
-    private Integer movement;
-    private Integer points;
 }

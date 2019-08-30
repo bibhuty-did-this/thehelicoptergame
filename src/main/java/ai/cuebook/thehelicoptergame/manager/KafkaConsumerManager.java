@@ -3,6 +3,7 @@ package ai.cuebook.thehelicoptergame.manager;
 import ai.cuebook.thehelicoptergame.dao.redis.KeyValueDAO;
 import ai.cuebook.thehelicoptergame.entity.kafka.WarEvent;
 import ai.cuebook.thehelicoptergame.enums.Actions;
+import ai.cuebook.thehelicoptergame.enums.Player;
 import ai.cuebook.thehelicoptergame.enums.RedisKeys;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -144,19 +145,21 @@ public class KafkaConsumerManager {
              *  + They move at speed 1 unit per second towards the gun
              */
             case DROP_BOMB_PERSONEL:
+
+                // See if we are eligible to drop or not
                 String totalBombPersonellFlying=keyValueDAO.getById(action.toString(),RedisKeys.HELICOPTER_BOMB_PERSONNEL.toString());
 
                 if(StringUtils.isEmpty(totalBombPersonellFlying)){
                     System.out.println("No bomb personell to drop");
                     break;
                 }
+
+
                 int totalPersonell=Integer.parseInt(totalBombPersonellFlying);
 
-
+                // See if the helicopter is in range in x-axis or it is crashed
                 String previousDropPosition=keyValueDAO.getById(action.toString(),RedisKeys.HELICOPTER_X.toString());
                 String helicopterSpeedAtPreviousDropPosition=keyValueDAO.getById(action.toString(),RedisKeys.HELICOPTER_PREVIOUS_ACTION_TIME.toString());
-
-                // See if the helicopter is in range in x-axis or it is crashed
                 int currentDropPosition=Integer.parseInt(previousDropPosition)+(Integer.parseInt(helicopterSpeedAtPreviousDropPosition)*(int)((System.currentTimeMillis()-Long.parseLong(helicopterSpeedAtPreviousDropPosition))/1000));
 
                 if(currentDropPosition>10){
@@ -200,9 +203,77 @@ public class KafkaConsumerManager {
                 }
                 keyValueDAO.update(action.toString(),RedisKeys.GUN_ANGLE.toString(),currentAngleForRightRotation);
                 break;
-            case SHOOT_HELICOPTER:
+            /**
+             * Assumption:
+             *  + Bomb personells can only be killed if they are at x-axis or inside helicopter, not in air
+             * Logic:
+             *  + Find the line slope of helicopter using y/x and convert it into degrees, in case the absolute differnece
+             *    of both the slopes is in between 10 degrees, the helicopter dies and the points will be awarded to the
+             *    shooter along with the number of personnels inside the helicopter.
+             *  + When you are shooting horizontally you are killing all the bomb personell who are in that direction.
+             *  + The bomb personell needs to hit the gun 10 times for it to destroy and once they are down they start
+             *    hitting once per second from any direction.
+             *
+             */
+            case SHOOT:
+                String helicopterAtY=keyValueDAO.getById(action.toString(),RedisKeys.HELICOPTER_Y.toString());
+                String helicopterPreviousPositionAtX=keyValueDAO.getById(action.toString(),RedisKeys.HELICOPTER_X.toString());
+                String throttleOfHelicopter=keyValueDAO.getById(action.toString(),RedisKeys.HELICOPTER_SPEED.toString());
+                String recordedTimeOfThrottleSpeed=keyValueDAO.getById(action.toString(),RedisKeys.HELICOPTER_PREVIOUS_ACTION_TIME.toString());
+
+                // See if the helicopter is in range in x-axis
+                int helicopterAtX=Integer.parseInt(helicopterPreviousPositionAtX)+(Integer.parseInt(throttleOfHelicopter)*(int)((System.currentTimeMillis()-Long.parseLong(recordedTimeOfThrottleSpeed))/1000));
+                if(helicopterAtX>10){
+                    System.out.println("helicopter crashed");
+
+                    // Whenever a helicopter crashed,just start another one
+                    warEvent.setAction(Actions.START_HELICOPTER);
+
+                    processMessage(warEvent);
+                    break;
+                }
+                int helicopterAngle=(int)((Math.atan((Double.parseDouble(helicopterAtY)/(double)helicopterAtX))*180)/ Math.PI);
+                int gunAngle= Integer.parseInt(keyValueDAO.getById(action.toString(),RedisKeys.GUN_ANGLE.toString()));
+
+                int score=0;
+                // If the gun is horizontal and shooting it'll kill the personells also on the ground
+                if(gunAngle<=10){
+
+                }else if(gunAngle>=170){
+
+                }
+
+                // Condition for helicopter being dead
+                if(Math.abs(helicopterAngle-gunAngle)<=10){
+                    System.out.println("Helicopter is crashed");
+                    score+=50;
+                    if(Player.FIRST_PLAYER.equals(warEvent.getPlayerNo())){
+                        String points=keyValueDAO.getById(Actions.PLAYER_1_SCORE.toString(),RedisKeys.PLAYER_1_POINTS.toString());
+                        if(!StringUtils.isEmpty(points)){
+                            score+=Integer.parseInt(points);
+                        }
+                        keyValueDAO.update(Actions.PLAYER_1_SCORE.toString(),RedisKeys.PLAYER_1_POINTS.toString(),Integer.toString(score));
+                    }else{
+                        String points=keyValueDAO.getById(Actions.PLAYER_2_SCORE.toString(),RedisKeys.PLAYER_2_POINTS.toString());
+                        if(!StringUtils.isEmpty(points)){
+                            score+=Integer.parseInt(points);
+                        }
+                        keyValueDAO.update(Actions.PLAYER_2_SCORE.toString(),RedisKeys.PLAYER_2_POINTS.toString(),Integer.toString(score));
+                    }
+
+                    // Whenever a helicopter crashed,just start another one
+                    warEvent.setAction(Actions.START_HELICOPTER);
+                    break;
+                }
+
                 break;
-            case SHOOT_BOMB_PERSONEL:
+            /**
+             * Logic:
+             *  + This method either needs to be run using a cron or front-end needs to call it time and again
+             *    using the exposed API, then only it'll work.
+             */
+            case BOMB_PERSONELL_SHOOTS_BACK:
+
                 break;
             default:
                 System.out.println("Please specify a proper action");

@@ -18,15 +18,7 @@ public class WarAction {
     private String id;
     private Player playerNo;
     private Actions action;
-    private String reaction;
     private String point;
-
-    public WarAction(Player playerNo, Actions action, String reaction, String point) {
-        this.playerNo = playerNo;
-        this.action = action;
-        this.reaction = reaction;
-        this.point = point;
-    }
 
     public WarAction(Player playerNo, Actions action) {
         this.playerNo=playerNo;

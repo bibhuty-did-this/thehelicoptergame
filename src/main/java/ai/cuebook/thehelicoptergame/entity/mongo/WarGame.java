@@ -15,14 +15,6 @@ public class WarGame {
     private String id;
     private String player1;
     private String player2;
-    private int player1Offence;
-    private int player1Defence;
-    private int player2Offence;
-    private int player2Defence;
-    private Long firstRoundStartTime;
-    private Long firstRoundEndTime;
-    private Long secondRoungStartTime;
-    private Long secondRoundEndTime;
     private Long startTime;
 
     public WarGame(String player1, String player2, Long startTime) {
