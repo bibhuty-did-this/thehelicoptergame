@@ -11,11 +11,14 @@ import org.springframework.util.StringUtils;
 @Service
 public class KafkaConsumerManager {
 
+    private final Long FIVE_MINUTES=300000L;
+    private final Integer ROTATE=10;
+    private static final String BATCH = "BATCH";
+    private static final String TIME = "TIME";
+
     @Autowired
     private KeyValueDAO keyValueDAO;
 
-    private final Long FIVE_MINUTES=300000L;
-    private final Integer ROTATE=10;
 
     public void processMessage(WarEvent warEvent){
         Actions action=warEvent.getAction();
@@ -60,6 +63,7 @@ public class KafkaConsumerManager {
                 keyValueDAO.add(action.toString(),RedisKeys.HELICOPTER_SPEED.toString(),"1");
                 keyValueDAO.add(action.toString(),RedisKeys.HELICOPTER_PREVIOUS_ACTION_TIME.toString(),Long.toString(System.currentTimeMillis()));
                 keyValueDAO.add(action.toString(),RedisKeys.HELICOPTER_PREVIOUS_ACTION_TIME.toString(),Long.toString(System.currentTimeMillis()));
+                keyValueDAO.add(action.toString(),RedisKeys.HELICOPTER_BOMB_PERSONNEL.toString(),Integer.toString(4));
 
                 // Set the helicopter's start time in cache
                 keyValueDAO.add(action.toString(),RedisKeys.HELICOPTER.toString().concat(totalHelicopters),Long.toString(System.currentTimeMillis()));
@@ -82,6 +86,11 @@ public class KafkaConsumerManager {
                 int xAxisCurrent=Integer.parseInt(helicopterMovementX)+(Integer.parseInt(helicopterSpeed)*(int)((System.currentTimeMillis()-Long.parseLong(currentHelicopterPreviousTime))/1000));
                 if(xAxisCurrent>10){
                     System.out.println("helicopter crashed");
+
+                    // Whenever a helicopter crashed,just start another one
+                    warEvent.setAction(Actions.START_HELICOPTER);
+
+                    processMessage(warEvent);
                     break;
                 }
 
@@ -99,6 +108,8 @@ public class KafkaConsumerManager {
                 // Helicopter can't go below ground
                 if(nowY<0){
                     System.out.println("Helicopter is crashed");
+                    // Whenever a helicopter crashed,just start another one
+                    warEvent.setAction(Actions.START_HELICOPTER);
                     break;
                 }
 
@@ -117,6 +128,8 @@ public class KafkaConsumerManager {
                 int currentHorizontalPosition=Integer.parseInt(currentHelicopterPosition)+(Integer.parseInt(currentHelicopterSpeed)*(int)((System.currentTimeMillis()-Long.parseLong(previousTimeWhenSpeedWasRecorded))/1000));
                 if(currentHorizontalPosition>10){
                     System.out.println("helicopter crashed");
+                    // Whenever a helicopter crashed,just start another one
+                    warEvent.setAction(Actions.START_HELICOPTER);
                     break;
                 }
 
@@ -124,7 +137,39 @@ public class KafkaConsumerManager {
                 keyValueDAO.update(action.toString(),RedisKeys.HELICOPTER_PREVIOUS_ACTION_TIME.toString(),Long.toString(System.currentTimeMillis()));
                 keyValueDAO.update(action.toString(),RedisKeys.HELICOPTER_SPEED.toString(),Integer.toString(Integer.parseInt(currentHelicopterSpeed)+1));
                 break;
+            /**
+             * Assumption:
+             *  + Height doesn't matter to bomb personell, they can jump from anywhere
+             *  + They can only be killed when they are at the ground
+             *  + They move at speed 1 unit per second towards the gun
+             */
             case DROP_BOMB_PERSONEL:
+                String totalBombPersonellFlying=keyValueDAO.getById(action.toString(),RedisKeys.HELICOPTER_BOMB_PERSONNEL.toString());
+
+                if(StringUtils.isEmpty(totalBombPersonellFlying)){
+                    System.out.println("No bomb personell to drop");
+                    break;
+                }
+                int totalPersonell=Integer.parseInt(totalBombPersonellFlying);
+
+
+                String previousDropPosition=keyValueDAO.getById(action.toString(),RedisKeys.HELICOPTER_X.toString());
+                String helicopterSpeedAtPreviousDropPosition=keyValueDAO.getById(action.toString(),RedisKeys.HELICOPTER_PREVIOUS_ACTION_TIME.toString());
+
+                // See if the helicopter is in range in x-axis or it is crashed
+                int currentDropPosition=Integer.parseInt(previousDropPosition)+(Integer.parseInt(helicopterSpeedAtPreviousDropPosition)*(int)((System.currentTimeMillis()-Long.parseLong(helicopterSpeedAtPreviousDropPosition))/1000));
+
+                if(currentDropPosition>10){
+                    System.out.println("Helicopter crashed");
+                    // Whenever a helicopter crashed,just start another one
+                    warEvent.setAction(Actions.START_HELICOPTER);
+                    break;
+                }
+
+                // Update bomb personell and location of current person and the current x position of soldier and time of drop
+                keyValueDAO.add(warEvent.getPlayerNo().toString().concat(BATCH),RedisKeys.GROUND_SOLDIER_DROP_POSITION.toString().concat(Integer.toString(totalPersonell)),Integer.toString(currentDropPosition));
+                keyValueDAO.add(warEvent.getPlayerNo().toString().concat(TIME),RedisKeys.GROUND_SOLDIER_DROP_TIME.toString().concat(Integer.toString(totalPersonell)),Long.toString(System.currentTimeMillis()));
+                keyValueDAO.update(action.toString(),RedisKeys.HELICOPTER_BOMB_PERSONNEL.toString(),Integer.toString(totalPersonell-1));
 
                 break;
             /**
@@ -135,7 +180,7 @@ public class KafkaConsumerManager {
             case ROTATE_LEFT:
                 String currentAngleForLeftRotation=keyValueDAO.getById(action.toString(),RedisKeys.GUN_ANGLE.toString());
                 if(StringUtils.isEmpty(currentAngleForLeftRotation)){
-                    currentAngleForLeftRotation=Integer.toString(Math.min(180,Integer.parseInt(currentAngleForLeftRotation)+10));
+                    currentAngleForLeftRotation=Integer.toString(Math.min(180,Integer.parseInt(currentAngleForLeftRotation)+ROTATE));
                 }else{
                     currentAngleForLeftRotation=Long.toString(90);
                 }
@@ -149,7 +194,7 @@ public class KafkaConsumerManager {
             case ROTATE_RIGHT:
                 String currentAngleForRightRotation=keyValueDAO.getById(action.toString(),RedisKeys.GUN_ANGLE.toString());
                 if(StringUtils.isEmpty(currentAngleForRightRotation)){
-                    currentAngleForRightRotation=Integer.toString(Math.max(0,Integer.parseInt(currentAngleForRightRotation)-10));
+                    currentAngleForRightRotation=Integer.toString(Math.max(0,Integer.parseInt(currentAngleForRightRotation)-ROTATE));
                 }else{
                     currentAngleForRightRotation=Long.toString(90);
                 }
